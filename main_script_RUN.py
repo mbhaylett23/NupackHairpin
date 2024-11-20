@@ -26,11 +26,13 @@ from config import get_config
 import matplotlib.cm as cm
 from tqdm import tqdm  # Import the tqdm library
 from difflib import SequenceMatcher  # For quick similarity scoring
+import random
 
 
 # Get the system/OS name
 os_name = platform.system()
-
+doTEST = 1 #this is for tesing the code so we dont have to loop through everything
+WrongHP = 1 #this is for seeing what happens when we make bad hairpin
 # Get configuration settings
 scoreLim, hpLEN, dataDIR, results_dir, doPLOT, numTOP, lowest_probability = get_config()
 basePAD = hpLEN # if 0  then no pad. Was default of 15
@@ -68,6 +70,68 @@ def _complement(sequence,verified):
         return seq
     else:
         return False
+    
+    
+class dna_sequence:
+    def __init__(self, name, sequence, length, mw, tm):
+        self.name = name
+        self.sequence = sequence
+        self.complement = _complement(self.sequence,'DNA')
+        self.length = length
+        self.mw = mw
+        self.tm = tm
+        
+ # Best two sequences for each of the siRNA
+ # Add first sequence
+ # Control siRNA which does not hybridise with any mRNA with the same hairpin sticky ends: TTCTCCGAACGTGTCACGT
+ # Check with control if it forms a complex with the mMMP9 and probabilities
+ 
+
+       
+sq6 = dna_sequence('sq6', 'TTGAGGTCGCCCTCAAAGGTT', 21, 6437.2, 54.4)
+sq2 = dna_sequence('sq2', 'TCGCTGTCAAAGTTCGAGGTG', 21, 6477.2, 54.4)
+sq3 = dna_sequence('sq3', 'TTCAGGGCGAGGACCATAGAG', 21, 6520.3, 56.3)
+sq4 = dna_sequence('sq4', 'AATTCAGGGCGAGGACCATAG', 21, 6504.3, 54.4)
+sq5 = dna_sequence('sq5', 'GCCTCAGAGAATCGCCAGTACT', 22, 6704.4, 56.7)
+sq1 = dna_sequence('sq1', 'GGGCAGAGGTGTCT', 14, 4359.9, 43.2)
+sq7 = dna_sequence('sq7', 'CCTCAAGTGGGACCATCATAA', 21, 6399.2, 52.4)
+sq8 = dna_sequence('sq8', 'CGGGGGGGGGGGGA', 14, 6399.2, 52.4)
+sq9 = dna_sequence('sq9', 'GACTCGACGGTGATGGGGGGC', 21, 6399.2, 52.4)
+sq10= dna_sequence('sq10', 'GGGGGGGGGGGG', 14, 6399.2, 52.4)
+if doTEST:
+    sequences = [sq8,sq2,sq9]
+    
+else:   
+    # List of sequence objects
+    sequences = [sq1, sq2, sq3, sq4, sq5, sq6, sq7]    
+
+
+def wrong_complement(sequence,verified):
+    '''This function returns a reverse complement 
+    of a DNA or RNA strand'''
+    #verified = verify_na(sequence)
+    if verified == "DNA":
+        # complement strand
+        # seq = sequence.replace("A", "t").replace(
+        #     "C", "g").replace("T", "a").replace("G", "c")
+        seq = sequence.upper()
+        # reverse strand
+        seq = seq[::-1]
+        return seq
+ 
+    elif verified == "RNA":
+       
+        # # complement strand
+        # seq = sequence.replace("A", "u").replace(
+        #     "C", "g").replace("U", "a").replace("G", "c")
+        seq = sequence.upper()
+         
+        # reverse strand
+        seq = seq[::-1]
+        return seq
+    else:
+        return False
+
 
 def verify_na(sequence):
     '''This code verifies if a sequence is a DNA or RNA'''
@@ -228,35 +292,19 @@ def find_best_match(sequence, target_dna):
 
     return best_match_segment, best_match_score
 
-class dna_sequence:
-    def __init__(self, name, sequence, length, mw, tm):
-        self.name = name
-        self.sequence = sequence
-        self.complement = _complement(self.sequence,'DNA')
-        self.length = length
-        self.mw = mw
-        self.tm = tm
 
-sq6 = dna_sequence('sq6', 'TTGAGGTCGCCCTCAAAGGTT', 21, 6437.2, 54.4)
-sq2 = dna_sequence('sq2', 'TCGCTGTCAAAGTTCGAGGTG', 21, 6477.2, 54.4)
-sq3 = dna_sequence('sq3', 'TTCAGGGCGAGGACCATAGAG', 21, 6520.3, 56.3)
-sq4 = dna_sequence('sq4', 'AATTCAGGGCGAGGACCATAG', 21, 6504.3, 54.4)
-sq5 = dna_sequence('sq5', 'GCCTCAGAGAATCGCCAGTACT', 22, 6704.4, 56.7)
-sq1 = dna_sequence('sq1', 'GGGCAGAGGTGTCT', 14, 4359.9, 43.2)
-sq7 = dna_sequence('sq7', 'CCTCAAGTGGGACCATCATAA', 21, 6399.2, 52.4)
 
-# Best two sequences for each of the siRNA
-# Add first sequence
-# Control siRNA which does not hybridise with any mRNA with the same hairpin sticky ends: TTCTCCGAACGTGTCACGT
-# Check with control if it forms a complex with the mMMP9 and probabilities
+# Create the DataFrame dynamically using a dictionary comprehension
+dna_seq = pd.DataFrame({
+    'Name': [seq.name for seq in sequences],
+    'Sequence': [seq.sequence for seq in sequences],
+    'Complement': [seq.complement for seq in sequences],
+    'Length': [seq.length for seq in sequences],
+    'MW': [seq.mw for seq in sequences],
+    'Tm(°C)': [seq.tm for seq in sequences]
+})
 
-dna_seq = pd.DataFrame({'Name': [sq1.name, sq2.name, sq3.name, sq4.name, sq5.name, sq6.name, sq7.name],
-                   'Sequence': [sq1.sequence, sq2.sequence, sq3.sequence, sq4.sequence, sq5.sequence, sq6.sequence, sq7.sequence],
-                   'Complement': [sq1.complement, sq2.complement, sq3.complement, sq4.complement, sq5.complement, sq6.complement, sq7.complement],
-                   'Length': [sq1.length, sq2.length, sq3.length, sq4.length, sq5.length, sq6.length, sq7.length],
-                    'MW': [sq1.mw, sq2.mw, sq3.mw, sq4.mw, sq5.mw, sq6.mw, sq7.mw], 
-                    'Tm(°C)': [sq1.tm, sq2.tm, sq3.tm, sq4.tm, sq5.tm, sq6.tm, sq7.tm]})
-
+    
 print(dna_seq)
 
 
@@ -282,10 +330,9 @@ for seq in dna_seq['Complement']:
     # Get the corresponding row from dna_seq for this `seq`
     dna_row = dna_seq[dna_seq['Complement'] == seq].iloc[0]
     
-    # Call try_all_matches with a score limit of at least half length of hairpin
-    # matches = try_all_matches(seq, mmp9_dna, round(len(seq) * scoreLim))
+    # Call try_all_matches with a score limit of at least half the length of hairpin
     matches = try_all_matches(seq, mmp9_dna, scoreLim)
-    # best_match_segment, best_match_score = find_best_match(seq,  mmp9_dna)
+    
     # Check if any matches were found
     if matches[0][0]:  # If there's at least one valid match
         hyb_col = True
@@ -293,7 +340,7 @@ for seq in dna_seq['Complement']:
         # Process each match
         for match in matches:
             _, query_start, query_end, subject_len, score = match
-            match_check = mmp9_dna [query_start:query_end]
+            match_check = mmp9_dna[query_start:query_end]
             
             # Calculate start and end positions for extracted slice with basePAD buffer
             if query_start <= basePAD:
@@ -326,15 +373,20 @@ for seq in dna_seq['Complement']:
                 'Tm(°C)': dna_row['Tm(°C)']
             })
     else:
-        # If no matches met the score limit, add NaN entry for unmatched sequence, including dna_seq data
+        # If no matches met the score limit, select a random segment from mmp9_dna
+        random_start = random.randint(0, len(mmp9_dna) - len(seq) - basePAD*2)
+        random_end = random_start + len(seq) + basePAD*2
+        random_segment = mmp9_dna[random_start:random_end]
+        
+        # Append data for the unmatched sequence, including a random segment of mmp9_dna
         dataMATCH.append({
             'hyb_col': False,
-            'mmp9_seqs': np.nan,
+            'mmp9_seqs': random_segment,  # Randomly selected segment
             'search_seqs': seq,
-            'query_start': None,
-            'query_end': None,
-            'subject_len': None,
-            'score': None,
+            'query_start': random_start,
+            'query_end': random_end,
+            'subject_len': len(seq),
+            'score': 0,  # Default score for random segment
             'Name': dna_row['Name'],
             'Sequence': dna_row['Sequence'],
             'Complement': dna_row['Complement'],
@@ -366,11 +418,21 @@ hairpin_pd = pd.DataFrame()
 sequences = list(itertools.product(nucleotides, repeat=hpLEN))
 # Filter for sequences that contain 3 (or 2) 'GC' nucleotides
 filtered_sequences = [seq for seq in sequences if ''.join(seq).count('GC') == 2 or ''.join(seq).count('GC') == 4] #WHY?
+
+
 # Convert list of tuples to list of strings
 list_of_strings = [''.join(t) for t in filtered_sequences]
+
+if doTEST:
+    list_of_strings = [list_of_strings[0]]   
+    
+
 # Get a list of the reverse complemente haipin sequences
 for seq in list_of_strings:
-    seq_complement = _complement(seq,'DNA') #for MIKE: printing in RNA should be DNA possibly
+    if WrongHP:
+        seq_complement = wrong_complement(seq,'DNA') 
+    else:
+        seq_complement = _complement(seq,'DNA') #for MIKE: printing in RNA should be DNA possibly
     reverse_complementary_hairpins.append(seq_complement)
     seq_complement=''
     
@@ -383,7 +445,12 @@ for seq in list_of_strings:
 results = []
 
 # Total number of outer loops (hairpin-complement pairs)
+
+
+# Correct total_pairs calculation
 total_pairs = len(list_of_strings)
+
+print(f"Total pairs: {total_pairs}")
 
 
 
@@ -436,7 +503,11 @@ results_df = pd.DataFrame(results, columns=['Hairpin', 'Complement', 'Max Prob H
 # threshold_complement = results_df['Max Prob Complement'].quantile(lowest_probability)
 
 # Filter results where both hairpin and complement probabilities are below their respective thresholds
-filtered_results = results_df[(results_df['Max Prob Hairpin'] <= lowest_probability) &
+
+if doTEST == 1:
+    filtered_results = results_df
+else:
+    filtered_results = results_df[(results_df['Max Prob Hairpin'] <= lowest_probability) &
                               (results_df['Max Prob Complement'] <= lowest_probability)]
 
 # Create the plot
@@ -481,13 +552,13 @@ mmp9_snippets = []
 # Initialize a set to track unique sequences
 unique_sequences = set()
 
-for sequence in dfMATCH['Sequence']:
+for sequence in dfMATCH['Complement']:
     # Check if this sequence has already been processed
     if sequence not in unique_sequences:
         unique_sequences.add(sequence)  # Add the unique sequence to the set
         
         # Extract all rows matching the current `sequence` and get `MMP9_Seq` values as a list
-        matching_rows = dfMATCH[dfMATCH['Sequence'] == sequence]
+        matching_rows = dfMATCH[dfMATCH['Complement'] == sequence]
         mmp9_snippets_for_sequence = matching_rows['mmp9_seqs'].tolist()  # List of all MMP9_Seq values for the sequence
         
         # Fetch the `name` from the first matching row
@@ -496,7 +567,7 @@ for sequence in dfMATCH['Sequence']:
         # Process each `mmp9_snippet` along with the `seq` and `rev` pair
         for mmp9_snippet in mmp9_snippets_for_sequence:
             for seq, rev in zip(filtered_results['Hairpin'], filtered_results['Complement']):
-                hairpin = seq + sequence + rev  # Construct the hairpin sequence
+                hairpin = seq + _complement(sequence,'DNA') + rev  # Construct the hairpin sequence (the original is the complement of the complement :))
                 hairpins.append(hairpin)
                 seq_name.append(name)
                 hairpin_length.append(len(hairpin))
@@ -511,7 +582,7 @@ hairpin_pd['Length'] = hairpin_length
 hairpin_pd['MW'] = hairpin_mw
 hairpin_pd['Tm(°C)'] = hairpin_mt
 hairpin_pd['MMP9_Seq'] = mmp9_snippets # This column contains the fragement of MMP9 sequence the hairpin should hybridise with
-
+hairpin_pd['MMP9_Seq_length'] = hairpin_pd['MMP9_Seq'].apply(len)
 # print(hairpin_pd)
 
 
@@ -534,10 +605,14 @@ hyb_dg = []
 hyb_p = []
 hyb_ep = []
 hTCK=0
-hairpin_pd = hairpin_pd.dropna(subset=['MMP9_Seq'])
+# hairpin_pd = hairpin_pd.dropna(subset=['MMP9_Seq'])
 gene = mmp9_dna
-# for hairpin, gene in zip(hairpin_pd['Hairpin'], hairpin_pd['MMP9_Seq']):
-for hairpin in hairpin_pd['Hairpin']:
+
+# Iterate over the hairpin and MMP9 sequence with a progress bar
+for hairpin, gene in tqdm(zip(hairpin_pd['Hairpin'], hairpin_pd['MMP9_Seq']),
+                          total=len(hairpin_pd),
+                          desc="Processing Hairpin-Gene Pairs"):
+    # for hairpin in hairpin_pd['Hairpin']:
     hTCK=hTCK+1
     # print(str(hTCK) + ' ' + hairpin + ' ' + str(gene))
     print(str(hTCK) + ' ' + hairpin)
@@ -569,8 +644,10 @@ for hairpin in hairpin_pd['Hairpin']:
     hairpin_dg.append(hairpin_result.free_energy)
     hairpin_mfe.append(hairpin_result.mfe[0][1])
     temp=hairpin_result.pairs.to_array()
+   
+        
     # temp[lower_triangle_indices] = np.nan
-    np.fill_diagonal(temp,0)
+    # np.fill_diagonal(temp,0)
     hairpin_p.append(temp)
     # print(hairpin,temp.shape)
     # lets get the equilibrium probability of the secondary structure
@@ -585,6 +662,41 @@ for hairpin in hairpin_pd['Hairpin']:
     hyb_dg.append(hyb_result.free_energy)
     hyb_mfe.append(hyb_result.mfe[0][1])
     temp=hyb_result.pairs.to_array()
+    
+    if doTEST:
+        # Create the figure and axis
+        plt.figure(figsize=(10, 8))
+        
+        # Plot the heatmap
+        # g=sns.heatmap(
+        #     temp, 
+        #     cmap="viridis", 
+        #     cbar=True, 
+        #     square=True,
+        #     xticklabels=list(hairpin) + list(hairpin)[::-1],  # Use slicing for reverse
+        #     yticklabels=list(gene) + list(gene)[::-1],        # Use slicing for reverse
+        # )
+        g=sns.heatmap(
+            temp, 
+            cmap="viridis", 
+            cbar=True, 
+            square=True,           
+        )
+        
+        g.set_yticklabels(g.get_xticklabels(), rotation = 90, fontsize = 8)
+        g.set_yticklabels(g.get_yticklabels(), rotation = 0, fontsize = 8)
+
+        # Add labels and title
+        plt.xlabel("Base Index", fontsize=12)
+        plt.ylabel("Base Index", fontsize=12)
+        plt.title("Hairpin: "+hairpin +' MMP9: '+gene, fontsize=14, fontweight='bold')
+        
+        # Save the figure as PNG and SVG
+        plt.savefig(results_dir + hairpin + "_probability_matrix.png", bbox_inches="tight", pad_inches=0.1)
+        plt.savefig(results_dir + hairpin + "_probability_matrix.svg", bbox_inches="tight", pad_inches=0.1)
+        plt.show()
+        plt.close()
+        
     #Set the lower triangle to NaN
     lower_triangle_indices = np.tril_indices_from(temp, k=-1)
     temp[lower_triangle_indices] = np.nan
@@ -638,7 +750,11 @@ hairpin_pd.to_excel(results_dir+'hairpin_pdDATA.xlsx', index=True)
 
 diff_mfe = np.subtract(hairpin_pd['Hyb_MFE (kcal/mol)'], hairpin_pd['Hairpin_MFE (kcal/mol)']) # Calculate the difference between complexes 
 hairpin_pd['MFE_Diff (kcal/mol)'] = diff_mfe
-hairpin_pd['MFE_Diff_Derivative'] = np.gradient(diff_mfe)+np.min(hairpin_pd['Hairpin_MFE (kcal/mol)']) # Append the list of differences into the dataframe
+if doTEST:
+    hairpin_pd['MFE_Diff_Derivative'] = np.nan # Append the list of differences into the dataframe
+
+else:    
+    hairpin_pd['MFE_Diff_Derivative'] = np.gradient(diff_mfe)+np.min(hairpin_pd['Hairpin_MFE (kcal/mol)']) # Append the list of differences into the dataframe
 
 # fig, ax = plt.subplots()
 # fig.set_size_inches(13, 6)
