@@ -33,6 +33,8 @@ import random
 os_name = platform.system()
 doTEST = 1 #this is for tesing the code so we dont have to loop through everything
 WrongHP = 1 #this is for seeing what happens when we make bad hairpin
+# Set the flag to determine loop type
+doFullGene = 1  # Set to 1 for processing both hairpin and gene, 0 for just hairpin
 # Get configuration settings
 scoreLim, hpLEN, dataDIR, results_dir, doPLOT, numTOP, lowest_probability = get_config()
 basePAD = hpLEN # if 0  then no pad. Was default of 15
@@ -606,108 +608,188 @@ hyb_p = []
 hyb_ep = []
 hTCK=0
 # hairpin_pd = hairpin_pd.dropna(subset=['MMP9_Seq'])
-gene = mmp9_dna
 
-# Iterate over the hairpin and MMP9 sequence with a progress bar
-for hairpin, gene in tqdm(zip(hairpin_pd['Hairpin'], hairpin_pd['MMP9_Seq']),
-                          total=len(hairpin_pd),
-                          desc="Processing Hairpin-Gene Pairs"):
-    # for hairpin in hairpin_pd['Hairpin']:
-    hTCK=hTCK+1
-    # print(str(hTCK) + ' ' + hairpin + ' ' + str(gene))
-    print(str(hTCK) + ' ' + hairpin)
+
+
+
+
+# Define the iterable based on the flag
+if doFullGene == 1:
+    iterable = hairpin_pd['Hairpin']
+    desc = "Processing Hairpins and full MMP9"
+else:
+    
+    iterable = zip(hairpin_pd['Hairpin'], hairpin_pd['MMP9_Seq'])
+    desc = "Processing Hairpin-Gene Pairs"
+
+# Iterate over the dynamically defined iterable with the shared code
+hTCK = 0
+for item in tqdm(iterable, total=len(hairpin_pd), desc=desc):
+    if doFullGene == 1:
+        hairpin = item
+        gene = mmp9_dna  # Use None or a default value for gene
+    else:
+        hairpin, gene = item       
+
+    hTCK += 1
+    print(f"{hTCK} {hairpin}")
+    
     # Define the strands
-    
     hp_st = Strand(hairpin, name='hp_st')
-    mmp9_st = Strand(gene, name='mmp9_st')
-    # Define the complex of interest
-    hp_complex = Complex([hp_st]) # Secondary structure of hairpin folding
-   
-    hyb_complex = Complex([hp_st, mmp9_st]) # Hybridisation between hairpin and gene of interest
-    #not_incl_complex = Complex([mmp9_st,hp_st]) # Hybridisation between hairpin and gene of interest
-    # Define the complex set to contain only one complex for both cases
-    hp_set = ComplexSet(strands={hp_st: 1e-6}, complexes=SetSpec(max_size=0, include=[hp_complex]))
-    hyb_set = ComplexSet(strands={hp_st: 1e-6, mmp9_st: 1e-6}, complexes=SetSpec(max_size=0, include=[hyb_complex]))
+    mmp9_st = Strand(gene, name='mmp9_st') if gene else None
     
- 
-    # Analyze the complex 
-    # Calculate pfunc, pairs, mfe, subopt
-    # Analyze the complex 
-   # Calculate pfunc, pairs, mfe, subopt
+    # Define the complex of interest
+    hp_complex = Complex([hp_st])  # Secondary structure of hairpin folding
+    hyb_complex = Complex([hp_st, mmp9_st]) if gene else None
+    
+    # Define the complex set
+    hp_set = ComplexSet(strands={hp_st: 1e-6}, complexes=SetSpec(max_size=0, include=[hp_complex]))
+    hyb_set = (ComplexSet(strands={hp_st: 1e-6, mmp9_st: 1e-6}, 
+                         complexes=SetSpec(max_size=0, include=[hyb_complex])) if gene else None)
+    
+    # Analyze the complex
     hp_result = complex_analysis(hp_set, compute=['pfunc', 'pairs', 'mfe'],
-                             options={'energy_gap': gap}, model=mmp9_model)
-    hyb_result = complex_analysis(hyb_set, compute=['pfunc', 'pairs', 'mfe'], 
-                             options={'energy_gap': gap}, model=mmp9_model)
-    # Store predicted dG and MFE values and bp probabilites
+                                 options={'energy_gap': gap}, model=mmp9_model)
+    
+    if gene:
+        hyb_result = complex_analysis(hyb_set, compute=['pfunc', 'pairs', 'mfe'],
+                                      options={'energy_gap': gap}, model=mmp9_model)
+
+    # Store results for hairpin
     hairpin_result = hp_result[hp_complex]
-    hyb_result = hyb_result[hyb_complex]
     hairpin_dg.append(hairpin_result.free_energy)
     hairpin_mfe.append(hairpin_result.mfe[0][1])
-    temp=hairpin_result.pairs.to_array()
+    hairpin_p.append(hairpin_result.pairs.to_array())
+    structure = hairpin_result.mfe[0].structure
+    hairpin_ep.append(structure_probability([hp_st], structure, mmp9_model))
+    
+    # Store results for hybridization (if applicable)
+    if gene:
+        hyb_result = hyb_result[hyb_complex]
+        hyb_dg.append(hyb_result.free_energy)
+        hyb_mfe.append(hyb_result.mfe[0][1])
+        
+        temp = hyb_result.pairs.to_array()
+        if doTEST:
+            plt.figure(figsize=(10, 8))
+            sns.heatmap(temp, cmap="viridis", cbar=True, square=True)
+            plt.xlabel("Base Index", fontsize=12)
+            plt.ylabel("Base Index", fontsize=12)
+            plt.title(f"Hairpin: {hairpin} MMP9: {gene}", fontsize=14, fontweight='bold')
+            plt.savefig(f"{results_dir}{hairpin}_probability_matrix.png", bbox_inches="tight", pad_inches=0.1)
+            plt.savefig(f"{results_dir}{hairpin}_probability_matrix.svg", bbox_inches="tight", pad_inches=0.1)
+            plt.show()
+            plt.close()
+        
+        # Set lower triangle to NaN and process
+        lower_triangle_indices = np.tril_indices_from(temp, k=-1)
+        temp[lower_triangle_indices] = np.nan
+        np.fill_diagonal(temp, 0)
+        hyb_p.append(temp)
+        structure = hyb_result.mfe[0].structure
+        hyb_ep.append(structure_probability([hp_st, mmp9_st], structure, mmp9_model))
+
+
+# # Iterate over the hairpin and MMP9 sequence with a progress bar
+# for hairpin, gene in tqdm(zip(hairpin_pd['Hairpin'], hairpin_pd['MMP9_Seq']),
+#                           total=len(hairpin_pd),
+#                           desc="Processing Hairpin-Gene Pairs"):
+# for hairpin in hairpin_pd['Hairpin']:
+#     hTCK=hTCK+1
+#     # print(str(hTCK) + ' ' + hairpin + ' ' + str(gene))
+#     print(str(hTCK) + ' ' + hairpin)
+#     # Define the strands
+    
+#     hp_st = Strand(hairpin, name='hp_st')
+#     mmp9_st = Strand(gene, name='mmp9_st')
+#     # Define the complex of interest
+#     hp_complex = Complex([hp_st]) # Secondary structure of hairpin folding
+   
+#     hyb_complex = Complex([hp_st, mmp9_st]) # Hybridisation between hairpin and gene of interest
+#     #not_incl_complex = Complex([mmp9_st,hp_st]) # Hybridisation between hairpin and gene of interest
+#     # Define the complex set to contain only one complex for both cases
+#     hp_set = ComplexSet(strands={hp_st: 1e-6}, complexes=SetSpec(max_size=0, include=[hp_complex]))
+#     hyb_set = ComplexSet(strands={hp_st: 1e-6, mmp9_st: 1e-6}, complexes=SetSpec(max_size=0, include=[hyb_complex]))
+    
+ 
+#     # Analyze the complex 
+#     # Calculate pfunc, pairs, mfe, subopt
+#     # Analyze the complex 
+#    # Calculate pfunc, pairs, mfe, subopt
+#     hp_result = complex_analysis(hp_set, compute=['pfunc', 'pairs', 'mfe'],
+#                              options={'energy_gap': gap}, model=mmp9_model)
+#     hyb_result = complex_analysis(hyb_set, compute=['pfunc', 'pairs', 'mfe'], 
+#                              options={'energy_gap': gap}, model=mmp9_model)
+#     # Store predicted dG and MFE values and bp probabilites
+#     hairpin_result = hp_result[hp_complex]
+#     hyb_result = hyb_result[hyb_complex]
+#     hairpin_dg.append(hairpin_result.free_energy)
+#     hairpin_mfe.append(hairpin_result.mfe[0][1])
+#     temp=hairpin_result.pairs.to_array()
    
         
-    # temp[lower_triangle_indices] = np.nan
-    # np.fill_diagonal(temp,0)
-    hairpin_p.append(temp)
-    # print(hairpin,temp.shape)
-    # lets get the equilibrium probability of the secondary structure
-    # Get the secondary structure
-    structure = hairpin_result.mfe[0].structure
-    # Calculate the probability
-    eqP = structure_probability([hp_st], structure, mmp9_model)
-    hairpin_ep.append(eqP)
+#     # temp[lower_triangle_indices] = np.nan
+#     # np.fill_diagonal(temp,0)
+#     hairpin_p.append(temp)
+#     # print(hairpin,temp.shape)
+#     # lets get the equilibrium probability of the secondary structure
+#     # Get the secondary structure
+#     structure = hairpin_result.mfe[0].structure
+#     # Calculate the probability
+#     eqP = structure_probability([hp_st], structure, mmp9_model)
+#     hairpin_ep.append(eqP)
     
       
        
-    hyb_dg.append(hyb_result.free_energy)
-    hyb_mfe.append(hyb_result.mfe[0][1])
-    temp=hyb_result.pairs.to_array()
+#     hyb_dg.append(hyb_result.free_energy)
+#     hyb_mfe.append(hyb_result.mfe[0][1])
+#     temp=hyb_result.pairs.to_array()
     
-    if doTEST:
-        # Create the figure and axis
-        plt.figure(figsize=(10, 8))
+#     if doTEST:
+#         # Create the figure and axis
+#         plt.figure(figsize=(10, 8))
         
-        # Plot the heatmap
-        # g=sns.heatmap(
-        #     temp, 
-        #     cmap="viridis", 
-        #     cbar=True, 
-        #     square=True,
-        #     xticklabels=list(hairpin) + list(hairpin)[::-1],  # Use slicing for reverse
-        #     yticklabels=list(gene) + list(gene)[::-1],        # Use slicing for reverse
-        # )
-        g=sns.heatmap(
-            temp, 
-            cmap="viridis", 
-            cbar=True, 
-            square=True,           
-        )
+#         # Plot the heatmap
+#         # g=sns.heatmap(
+#         #     temp, 
+#         #     cmap="viridis", 
+#         #     cbar=True, 
+#         #     square=True,
+#         #     xticklabels=list(hairpin) + list(hairpin)[::-1],  # Use slicing for reverse
+#         #     yticklabels=list(gene) + list(gene)[::-1],        # Use slicing for reverse
+#         # )
+#         g=sns.heatmap(
+#             temp, 
+#             cmap="viridis", 
+#             cbar=True, 
+#             square=True,           
+#         )
         
-        g.set_yticklabels(g.get_xticklabels(), rotation = 90, fontsize = 8)
-        g.set_yticklabels(g.get_yticklabels(), rotation = 0, fontsize = 8)
+#         g.set_yticklabels(g.get_xticklabels(), rotation = 90, fontsize = 8)
+#         g.set_yticklabels(g.get_yticklabels(), rotation = 0, fontsize = 8)
 
-        # Add labels and title
-        plt.xlabel("Base Index", fontsize=12)
-        plt.ylabel("Base Index", fontsize=12)
-        plt.title("Hairpin: "+hairpin +' MMP9: '+gene, fontsize=14, fontweight='bold')
+#         # Add labels and title
+#         plt.xlabel("Base Index", fontsize=12)
+#         plt.ylabel("Base Index", fontsize=12)
+#         plt.title("Hairpin: "+hairpin +' MMP9: '+gene, fontsize=14, fontweight='bold')
         
-        # Save the figure as PNG and SVG
-        plt.savefig(results_dir + hairpin + "_probability_matrix.png", bbox_inches="tight", pad_inches=0.1)
-        plt.savefig(results_dir + hairpin + "_probability_matrix.svg", bbox_inches="tight", pad_inches=0.1)
-        plt.show()
-        plt.close()
+#         # Save the figure as PNG and SVG
+#         plt.savefig(results_dir + hairpin + "_probability_matrix.png", bbox_inches="tight", pad_inches=0.1)
+#         plt.savefig(results_dir + hairpin + "_probability_matrix.svg", bbox_inches="tight", pad_inches=0.1)
+#         plt.show()
+#         plt.close()
         
-    #Set the lower triangle to NaN
-    lower_triangle_indices = np.tril_indices_from(temp, k=-1)
-    temp[lower_triangle_indices] = np.nan
-    np.fill_diagonal(temp,0)
-    hyb_p.append(temp)    
-    # lets get the equilibrium probability of the secondary structure
-    # Get the secondary structure
-    structure = hyb_result.mfe[0].structure
-    # Calculate the probability
-    eqP = structure_probability([hp_st,mmp9_st], structure, mmp9_model)
-    hyb_ep.append(eqP)
+#     #Set the lower triangle to NaN
+#     lower_triangle_indices = np.tril_indices_from(temp, k=-1)
+#     temp[lower_triangle_indices] = np.nan
+#     np.fill_diagonal(temp,0)
+#     hyb_p.append(temp)    
+#     # lets get the equilibrium probability of the secondary structure
+#     # Get the secondary structure
+#     structure = hyb_result.mfe[0].structure
+#     # Calculate the probability
+#     eqP = structure_probability([hp_st,mmp9_st], structure, mmp9_model)
+#     hyb_ep.append(eqP)
      
        
         
