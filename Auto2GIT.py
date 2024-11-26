@@ -7,6 +7,19 @@ Created on Mon Nov 18 15:03:31 2024
 """
 
 import subprocess
+import os
+
+# Correct WSL path
+path = "/mnt/c/Users/michael.bruyns/NupackGIT/Nupack4GIT/MainCode"
+
+# Change the directory
+try:
+    os.chdir(path)
+    print(f"Current working directory: {os.getcwd()}")
+except FileNotFoundError:
+    print(f"Error: The directory '{path}' does not exist.")
+except PermissionError:
+    print(f"Error: Permission denied to access '{path}'.")
 
 # Function to run a shell command
 def run_command(command):
