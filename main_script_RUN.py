@@ -33,7 +33,7 @@ import random
 os_name = platform.system()
 doTEST = 0 #this is for tesing the code so we dont have to loop through everything
 WrongHP = 0 #this is for seeing what happens when we make bad hairpin
-doFullGene = 0  # Set to 1 for processing hairpin and full mmp9, 0 for hairpin and best matching section of MMP9
+doFullGene = 1  # Set to 1 for processing hairpin and full mmp9, 0 for hairpin and best matching section of MMP9
 # Get configuration settings
 scoreLim, hpLEN, dataDIR, results_dir, doPLOT, numTOP, lowest_probability = get_config()
 basePAD = hpLEN # if 0  then no pad. Was default of 15
@@ -178,7 +178,7 @@ def sum_diagonals(matrix):
 
         # Check if this is the highest mean so far
         if diagonal_mean > max_mean:
-            max_mean = diagonal_sum
+            max_mean = diagonal_mean
             max_mean_index = i
 
     # return diagonal_data, max_sum_index, max_sum, max_mean, (main_diagonal_sum, main_diagonal_mean), (middle_diagonal_sum, middle_diagonal_mean)
@@ -606,8 +606,7 @@ hyb_dg = []
 hyb_p = []
 hyb_ep = []
 hTCK=0
-# hairpin_pd = hairpin_pd.dropna(subset=['MMP9_Seq'])
-gene = mmp9_dna
+
 
 # Iterate over the hairpin and MMP9 sequence with a progress bar
 
@@ -626,25 +625,26 @@ hTCK = 0
 for item in tqdm(iterable, total=len(hairpin_pd), desc=desc):
     if doFullGene == 1:
         hairpin = item
-        gene = mmp9_dna  # Use None or a default value for gene
+        gene = mmp9_dna[1143-200:1143+200]  # Use None or a default value for gene
     else:
-        hairpin, gene = item       
+        hairpin, gene = item    
+        gene = gene
 
     hTCK += 1
     print(f"{hTCK} {hairpin}")
     
     # Define the strands
     hp_st = Strand(hairpin, name='hp_st')
-    mmp9_st = Strand(gene, name='mmp9_st') if gene else None
+    mmp9_st = Strand(gene, name='mmp9_st') 
     
     # Define the complex of interest
     hp_complex = Complex([hp_st])  # Secondary structure of hairpin folding
-    hyb_complex = Complex([hp_st, mmp9_st]) if gene else None
+    hyb_complex = Complex([hp_st, mmp9_st]) 
     
     # Define the complex set
     hp_set = ComplexSet(strands={hp_st: 1e-6}, complexes=SetSpec(max_size=0, include=[hp_complex]))
     hyb_set = (ComplexSet(strands={hp_st: 1e-6, mmp9_st: 1e-6}, 
-                         complexes=SetSpec(max_size=0, include=[hyb_complex])) if gene else None)
+                         complexes=SetSpec(max_size=0, include=[hyb_complex])) )
     
     # Analyze the complex
     hp_result = complex_analysis(hp_set, compute=['pfunc', 'pairs', 'mfe'],
@@ -668,21 +668,26 @@ for item in tqdm(iterable, total=len(hairpin_pd), desc=desc):
     hyb_mfe.append(hyb_result.mfe[0][1])
     
     temp = hyb_result.pairs.to_array()
+    temp = temp[len(hairpin):, :len(hairpin)]
     if doTEST:
         plt.figure(figsize=(10, 8))
-        sns.heatmap(temp, cmap="viridis", cbar=True, square=True)
-        plt.xlabel("Base Index", fontsize=12)
-        plt.ylabel("Base Index", fontsize=12)
-        plt.title(f"Hairpin: {hairpin} MMP9: {gene}", fontsize=14, fontweight='bold')
+        ax = sns.heatmap(temp, cmap="viridis", cbar=False, square=True)
+
+        # Remove tick labels
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.xlabel("Hairpin", fontsize=12)
+        plt.ylabel("MMP9", fontsize=12)
+        # plt.title(f"Hairpin: {hairpin} MMP9: {gene}", fontsize=14, fontweight='bold')
         plt.savefig(f"{results_dir}{hairpin}_probability_matrix.png", bbox_inches="tight", pad_inches=0.1)
         plt.savefig(f"{results_dir}{hairpin}_probability_matrix.svg", bbox_inches="tight", pad_inches=0.1)
         plt.show()
         plt.close()
     
     # Set lower triangle to NaN and process
-    lower_triangle_indices = np.tril_indices_from(temp, k=-1)
-    temp[lower_triangle_indices] = np.nan
-    np.fill_diagonal(temp, 0)
+    # lower_triangle_indices = np.tril_indices_from(temp, k=-1)
+    # temp[lower_triangle_indices] = np.nan
+    # np.fill_diagonal(temp, 0)
     hyb_p.append(temp)
     structure = hyb_result.mfe[0].structure
     hyb_ep.append(structure_probability([hp_st, mmp9_st], structure, mmp9_model))
@@ -1091,13 +1096,13 @@ for seqSTR in seqIDX:
     sequence = globals().get(seqSTR).sequence  # or use locals().get(seqSTR) if needed
     temp.sort_values(by='D_Pb_Hairpin_D_Pb_Hyb_mean_DIAG', ascending=False).reset_index(drop=True)
     plt.figure(figsize=(10, 6))
-    scatter = plt.scatter(temp['D_Pb_Hairpin_mean_DIAG'], temp['D_Pb_Hyb_Weighted_Mean'],
+    scatter = plt.scatter(temp['D_Pb_Hairpin_mean_DIAG'], temp['D_Pb_Hyb_max_sum'],
                           marker='o', s=50, c=temp.index, cmap='viridis')
     plt.colorbar(scatter, label='Index')
     # Set labels and title
     plt.xlabel('D_Pb_Hairpin_mean_DIAG')
-    plt.ylabel('D_Pb_Hyb_Weighted_mean')
-    plt.title('Unfiltered hyb results weighted by max hairpin value: '+ seqSTR + '  ' + sequence)
+    plt.ylabel('D_Pb_Hyb_max')
+    plt.title('Unfiltered hyb max results weighted by max hairpin value: '+ seqSTR + '  ' + sequence)
    
     # Add a grid for better readability
     plt.grid(True, linestyle='--', alpha=0.7)
@@ -1107,8 +1112,8 @@ for seqSTR in seqIDX:
     # Show the plot
     plt.tight_layout()
    
-    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybWEIGHTEDmeanDIAG.svg", bbox_inches='tight', pad_inches=0)
-    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybWEIGHTEDmeanDIAG.png",  bbox_inches='tight', pad_inches=0)
+    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMAX.svg", bbox_inches='tight', pad_inches=0)
+    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMAX.png",  bbox_inches='tight', pad_inches=0)
     plt.show()
    
 #non-weighted mean
@@ -1123,7 +1128,7 @@ for seqSTR in seqIDX:
     # Set labels and title
     plt.xlabel('D_Pb_Hairpin_mean_DIAG')
     plt.ylabel('D_Pb_Hyb_mean')
-    plt.title('Unfiltered hyb non-weighted results: '+ seqSTR + '  ' + sequence)
+    plt.title('Unfiltered hyb mean results weighted by max hairpin value: '+ seqSTR + '  ' + sequence)
    
    
     # Add a grid for better readability
@@ -1134,34 +1139,34 @@ for seqSTR in seqIDX:
     # Show the plot
     plt.tight_layout()
     plt.show()
-    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEANdiag.svg", bbox_inches='tight', pad_inches=0)
-    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEANdiag.png",  bbox_inches='tight', pad_inches=0)
+    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEAN.svg", bbox_inches='tight', pad_inches=0)
+    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEAN.png",  bbox_inches='tight', pad_inches=0)
 
 plt.close('all')
-#weighted mean by number of elements in largest diagonal
-for seqSTR in seqIDX:
-    temp = hairpin_pd[hairpin_pd['Name'].str.contains(seqSTR)].reset_index(drop=True)
-    temp.sort_values(by='D_Pb_Hairpin_D_Pb_Hyb_mean_DIAG', ascending=False).reset_index(drop=True)
-    plt.figure(figsize=(10, 6))
-    scatter = plt.scatter(temp['D_Pb_Hairpin_mean_DIAG'], temp['D_Pb_Hyb_mean']/np.nanmax(non_nan_count_hyb_Pb),
-                          marker='o', s=50, c=temp.index, cmap='viridis')
-    plt.colorbar(scatter, label='Index')
-    # Set labels and title
-    plt.xlabel('D_Pb_Hairpin_mean_DIAG')
-    plt.ylabel('D_Pb_Hyb_mean')
-    plt.title('Unfiltered hyb resultsw normalised by number of elements in largest diagonal: '+ seqSTR + '  ' + sequence)
+# #weighted mean by number of elements in largest diagonal
+# for seqSTR in seqIDX:
+#     temp = hairpin_pd[hairpin_pd['Name'].str.contains(seqSTR)].reset_index(drop=True)
+#     temp.sort_values(by='D_Pb_Hairpin_D_Pb_Hyb_mean_DIAG', ascending=False).reset_index(drop=True)
+#     plt.figure(figsize=(10, 6))
+#     scatter = plt.scatter(temp['D_Pb_Hairpin_mean_DIAG'], temp['D_Pb_Hyb_mean']/np.nanmax(non_nan_count_hyb_Pb),
+#                           marker='o', s=50, c=temp.index, cmap='viridis')
+#     plt.colorbar(scatter, label='Index')
+#     # Set labels and title
+#     plt.xlabel('D_Pb_Hairpin_mean_DIAG')
+#     plt.ylabel('D_Pb_Hyb_mean')
+#     plt.title('Unfiltered hyb resultsw normalised by number of elements in largest diagonal: '+ seqSTR + '  ' + sequence)
    
-    # Add a grid for better readability
-    plt.grid(True, linestyle='--', alpha=0.7)
-    # Set the y-axis limits
-    plt.ylim(0, 1)
-    # plt.axvline(x=0.9, color='r', linestyle='--', alpha=0.5)
-    # Show the plot
-    plt.tight_layout()
+#     # Add a grid for better readability
+#     plt.grid(True, linestyle='--', alpha=0.7)
+#     # Set the y-axis limits
+#     plt.ylim(0, 1)
+#     # plt.axvline(x=0.9, color='r', linestyle='--', alpha=0.5)
+#     # Show the plot
+#     plt.tight_layout()
    
-    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEANdiagWEIGHTEDbyMAXdiagNUMelements.svg", bbox_inches='tight', pad_inches=0)
-    plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEANdiagEIGHTEDbyMAXdiagNUMelements.png",  bbox_inches='tight', pad_inches=0)
-    plt.show()
+#     plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEANdiagWEIGHTEDbyMAXdiagNUMelements.svg", bbox_inches='tight', pad_inches=0)
+#     plt.savefig(results_dir + seqSTR +"_meanHPdiagVShybMEANdiagEIGHTEDbyMAXdiagNUMelements.png",  bbox_inches='tight', pad_inches=0)
+#     plt.show()
 
 
 # # Sort by 'D_Pb_Hairpin_mean_DIAG' in descending order
