@@ -39,7 +39,7 @@ run_command(["git", "config", "--global", "user.email", user_email])
 
 
 # Personal Access Token (PAT)
-pat = "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"  # Replace with your actual PAT
+pat = "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"  # Replace with your actual PAT
 
 # Update the remote URL with the PAT
 remote_url = f"https://{pat}@github.com/mbhaylett23/NupackHairpin.git"
